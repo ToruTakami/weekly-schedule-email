@@ -1,0 +1,109 @@
+name: 週間予定メール送信
+
+on:
+  schedule:
+    # 毎週日曜23:00 UTC = 毎週月曜08:00 JST
+    - cron: '0 23 * * 0'
+  workflow_dispatch:
+    # 手動実行（テスト用）
+    inputs:
+      dry_run:
+        description: 'ドライラン（メール送信しない）'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+jobs:
+  send-weekly-schedule:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      # Step 1: リポジトリのチェックアウト
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v4
+
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      # Step 2: Python 環境のセットアップ
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      - name: Python 3.11 のセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      # Step 3: 依存パッケージのインストール
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      - name: 依存パッケージのインストール
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          echo "✓ パッケージのインストール完了"
+
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      # Step 4: 送信先アドレスの事前検証
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      - name: 送信先アドレスの事前検証
+        run: |
+          EXPECTED_RECIPIENT="takami.sp@gmail.com"
+          ACTUAL_RECIPIENT="takami.sp@gmail.com"
+
+          echo "送信先アドレスを確認しています..."
+          echo "  期待値: $EXPECTED_RECIPIENT"
+          echo "  実際値: $ACTUAL_RECIPIENT"
+
+          if [ "$ACTUAL_RECIPIENT" != "$EXPECTED_RECIPIENT" ]; then
+            echo "❌ ERROR: 送信先アドレスが正しくありません。メール送信を中止します。"
+            exit 1
+          fi
+
+          echo "✓ 送信先アドレス検証OK: $ACTUAL_RECIPIENT"
+
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      # Step 5: GitHub Secrets の確認
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      - name: GitHub Secrets の確認
+        run: |
+          if [ -z "${{ secrets.GOOGLE_TOKEN_JSON }}" ]; then
+            echo "❌ ERROR: GOOGLE_TOKEN_JSON が設定されていません"
+            exit 1
+          fi
+          echo "✓ GOOGLE_TOKEN_JSON が設定されています"
+
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      # Step 6: 週間予定メール送信
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      - name: 週間予定メール送信
+        env:
+          GOOGLE_TOKEN_JSON: ${{ secrets.GOOGLE_TOKEN_JSON }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          echo "実行日時 (UTC): $(date -u '+%Y-%m-%d %H:%M:%S')"
+          echo "実行日時 (JST): $(TZ='Asia/Tokyo' date '+%Y-%m-%d %H:%M:%S')"
+          echo "ドライラン: $DRY_RUN"
+          echo ""
+          python src/weekly_schedule.py
+
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      # Step 7: 実行結果のサマリー出力
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      - name: 実行結果のサマリー
+        if: always()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "実行結果サマリー"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "完了日時 (JST): $(TZ='Asia/Tokyo' date '+%Y-%m-%d %H:%M:%S')"
+          echo "ジョブステータス: ${{ job.status }}"
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✓ 週間予定メールが正常に送信されました"
+          else
+            echo "❌ エラーが発生しました。上記のログをご確認ください"
+          fi
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
