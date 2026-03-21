@@ -48,15 +48,12 @@ GOOGLE_SCOPES = [
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def get_week_range():
     """
-    実行日（月曜日）から始まる1週間の日付範囲を返す（JST）
+    実行日から7日間の日付範囲を返す（JST）
     Returns: (start_date, end_date) の tuple
     """
     now = datetime.now(JST)
-    days_since_monday = now.weekday()  # 月曜=0, 日曜=6
-    monday = now - timedelta(days=days_since_monday)
-    sunday = monday + timedelta(days=6)
-    start = monday.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = sunday.replace(hour=23, minute=59, second=59, microsecond=0)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = (start + timedelta(days=6)).replace(hour=23, minute=59, second=59, microsecond=0)
     return start, end
 
 
