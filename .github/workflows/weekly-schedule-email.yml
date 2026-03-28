@@ -16,7 +16,11 @@ on:
           - 'false'
           - 'true'
 
-jobs:
+permissions:
+  contents: read
+    secrets: write
+    
+    jobs:
   send-weekly-schedule:
     runs-on: ubuntu-latest
     timeout-minutes: 10
