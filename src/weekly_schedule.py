@@ -11,10 +11,13 @@ import json
 import base64
 import logging
 import sys
+from base64 import b64encode
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 
 import pytz
+import requests
+from nacl import encoding, public
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -63,7 +66,7 @@ def get_week_range():
 def setup_google_services():
     """
     GitHub SecretsのGOOGLE_TOKEN_JSONを使いGoogle Calendar/Gmail APIを初期化する
-    Returns: (calendar_service, gmail_service) の tuple
+    Returns: (calendar_service, gmail_service, creds) の tuple
     """
     logger.info("Google APIサービスを初期化しています...")
 
@@ -78,7 +81,74 @@ def setup_google_services():
     gmail_service = build('gmail', 'v1', credentials=creds)
 
     logger.info("Google APIサービスの初期化が完了しました")
-    return calendar_service, gmail_service
+    return calendar_service, gmail_service, creds
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# トークン自動保存
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def save_credentials_to_github_secret(creds):
+    """
+    更新されたOAuth認証情報をGitHub Secretsに自動保存する。
+
+    Google APIの呼び出し時にアクセストークンが自動更新された場合、
+    最新のトークン情報をGitHub Secrets（GOOGLE_TOKEN_JSON）に書き戻す。
+    これにより、次回実行時も有効なトークンが使用できる。
+
+    必要な環境変数:
+        GITHUB_TOKEN      : secrets:write 権限を持つトークン
+        GITHUB_REPOSITORY : リポジトリ名（例: ToruTakami/weekly-schedule-email）
+    """
+    github_token = os.environ.get('GITHUB_TOKEN')
+    github_repo = os.environ.get('GITHUB_REPOSITORY')
+
+    if not github_token or not github_repo:
+        logger.warning("GITHUB_TOKEN または GITHUB_REPOSITORY が未設定のためSecret更新をスキップ")
+        return
+
+    try:
+        # 最新のトークンデータを組み立てる
+        token_data = {
+            "token": creds.token,
+            "refresh_token": creds.refresh_token,
+            "token_uri": creds.token_uri,
+            "client_id": creds.client_id,
+            "client_secret": creds.client_secret,
+            "scopes": list(creds.scopes)
+        }
+
+        headers = {
+            'Authorization': f'Bearer {github_token}',
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28'
+        }
+
+        # リポジトリの公開鍵を取得（暗号化に使用）
+        key_url = f'https://api.github.com/repos/{github_repo}/actions/secrets/public-key'
+        key_resp = requests.get(key_url, headers=headers)
+        key_resp.raise_for_status()
+        key_data = key_resp.json()
+
+        # libsodium (PyNaCl) でトークンデータを暗号化
+        repo_public_key = public.PublicKey(
+            key_data['key'].encode(), encoding.Base64Encoder()
+        )
+        sealed_box = public.SealedBox(repo_public_key)
+        encrypted = sealed_box.encrypt(json.dumps(token_data).encode())
+        encrypted_b64 = b64encode(encrypted).decode()
+
+        # GitHub Secret を更新
+        secret_url = f'https://api.github.com/repos/{github_repo}/actions/secrets/GOOGLE_TOKEN_JSON'
+        update_resp = requests.put(secret_url, headers=headers, json={
+            'encrypted_value': encrypted_b64,
+            'key_id': key_data['key_id']
+        })
+        update_resp.raise_for_status()
+        logger.info("✓ GitHub Secret (GOOGLE_TOKEN_JSON) を最新のトークンで自動更新しました")
+
+    except Exception as e:
+        # Secret更新の失敗はメール送信を止めない（警告のみ）
+        logger.warning(f"GitHub Secret の自動更新に失敗しました（処理は継続）: {e}")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -275,7 +345,7 @@ def main():
     try:
         # ステップ1: Google APIサービスの初期化
         logger.info("[STEP 1/5] Google APIサービスを初期化")
-        calendar_service, gmail_service = setup_google_services()
+        calendar_service, gmail_service, creds = setup_google_services()
 
         # ステップ2: 日付範囲の取得
         logger.info("[STEP 2/5] 対象期間を確認")
@@ -296,6 +366,10 @@ def main():
         # ステップ5: メール送信（送信先検証込み）
         logger.info("[STEP 5/5] メールを送信")
         send_email(gmail_service, subject, body, RECIPIENT_EMAIL)
+
+        # ステップ完了後: 更新されたトークンをGitHub Secretsに自動保存
+        logger.info("[POST] GitHub Secret にトークンを自動保存")
+        save_credentials_to_github_secret(creds)
 
         logger.info("=" * 50)
         logger.info("週間予定メール送信 完了")
