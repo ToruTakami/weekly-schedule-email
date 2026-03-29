@@ -375,4 +375,20 @@ def main():
         logger.info("週間予定メール送信 完了")
         logger.info("=" * 50)
 
-    except Val
+    except ValueError as e:
+        logger.error(f"[検証エラー] {e}")
+        exit_code = 1
+
+    except HttpError as e:
+        logger.error(f"[Google APIエラー] {e}")
+        exit_code = 2
+
+    except Exception as e:
+        logger.error(f"[予期しないエラー] {e}", exc_info=True)
+        exit_code = 3
+
+    return exit_code
+
+
+if __name__ == '__main__':
+    sys.exit(main())
