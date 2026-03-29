@@ -18,9 +18,9 @@ on:
 
 permissions:
   contents: read
-    secrets: write
+  secrets: write
     
-    jobs:
+jobs:
   send-weekly-schedule:
     runs-on: ubuntu-latest
     timeout-minutes: 10
