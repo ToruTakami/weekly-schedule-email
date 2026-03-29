@@ -99,11 +99,11 @@ def save_credentials_to_github_secret(creds):
         GITHUB_TOKEN      : secrets:write 権限を持つトークン
         GITHUB_REPOSITORY : リポジトリ名（例: ToruTakami/weekly-schedule-email）
     """
-    github_token = os.environ.get('GITHUB_TOKEN')
+    github_token = os.environ.get('GH_PAT')
     github_repo = os.environ.get('GITHUB_REPOSITORY')
 
     if not github_token or not github_repo:
-        logger.warning("GITHUB_TOKEN または GITHUB_REPOSITORY が未設定のためSecret更新をスキップ")
+        logger.warning("GH_PAT または GITHUB_REPOSITORY が未設定のためSecret更新をスキップ")
         return
 
     try:
@@ -375,20 +375,4 @@ def main():
         logger.info("週間予定メール送信 完了")
         logger.info("=" * 50)
 
-    except ValueError as e:
-        logger.error(f"[検証エラー] {e}")
-        exit_code = 1
-
-    except HttpError as e:
-        logger.error(f"[Google APIエラー] {e}")
-        exit_code = 2
-
-    except Exception as e:
-        logger.error(f"[予期しないエラー] {e}", exc_info=True)
-        exit_code = 3
-
-    return exit_code
-
-
-if __name__ == '__main__':
-    sys.exit(main())
+    except Val
