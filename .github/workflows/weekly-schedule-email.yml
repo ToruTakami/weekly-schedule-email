@@ -19,9 +19,6 @@ on:
 permissions:
   contents: read
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   send-weekly-schedule:
     runs-on: ubuntu-latest
@@ -32,13 +29,13 @@ jobs:
       # Step 1: リポジトリのチェックアウト
       # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       - name: リポジトリをチェックアウト
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       # Step 2: Python 環境のセットアップ
       # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       - name: Python 3.11 のセットアップ
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
